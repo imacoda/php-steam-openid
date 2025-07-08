@@ -78,49 +78,51 @@ class SteamOpenID
      */
     public function validate(): string
     {
-        // check constraints that we always expect to be constant.
         $constraints = [
             'openid_ns' => 'http://specs.openid.net/auth/2.0',
             'openid_op_endpoint' => 'https://steamcommunity.com/openid/login',
             'openid_mode' => 'id_res',
         ];
-
+    
         foreach ($constraints as $key => $expected) {
             $actual = $this->params[$key] ?? null;
-
             if ($actual !== $expected) {
                 throw new InvalidArgumentException("expected '{$key}' to be '{$expected}', was '{$actual}'");
             }
         }
-
+    
         $arguments = $this->getArguments();
-
+    
         foreach ($arguments as $key => $value) {
-            // An array value will be FALSE if the filter fails, or NULL if the variable is not set.
-            // In our case we want everything to be a string.
             if (!is_string($value)) {
                 $actual = ($this->params[$key] ?? 'null');
                 throw new InvalidArgumentException("'{$key}' failed to meet filter criteria (value was {$actual})");
             }
         }
-
+    
         if (strpos($arguments['openid_return_to'], $this->returnTo) !== 0) {
             throw new InvalidArgumentException("expected {$this->returnTo}, actual {$arguments['openid_return_to']}");
         }
-
+    
         if ($arguments['openid_claimed_id'] !== $arguments['openid_identity']) {
             throw new InvalidArgumentException("claimed_id and identity should match ({$arguments['openid_claimed_id']}, {$arguments['openid_identity']}");
         }
-
-        if (preg_match('/^https?:\/\/steamcommunity.com\/openid\/id\/(7656119[0-9]{10})\/?$/',
-                $arguments['openid_identity'], $communityId) !== 1) {
-            throw new InvalidArgumentException("openid_identity does not appear to contain a valid Steam Community ID ({$arguments['openid_identity']})");
+    
+        // Проверка SteamID64
+        if (preg_match('/steamcommunity\.com\/(openid\/id|profiles)\/(\d+)/', 
+                        $arguments['openid_identity'], $communityId) !== 1) {
+            throw new InvalidArgumentException("openid_identity does not contain a numeric SteamID64 ({$arguments['openid_identity']})");
         }
-
+    
+        $steamId64 = $communityId[2];
+        if (!is_numeric($steamId64) || $steamId64 < 76561197960265728) {
+            throw new InvalidArgumentException("Extracted SteamID64 is invalid ({$steamId64})");
+        }
+    
         $arguments['openid_mode'] = 'check_authentication';
-
+    
         $c = curl_init();
-
+    
         curl_setopt_array($c, [
             CURLOPT_USERAGENT => 'OpenID Verification (+https://github.com/fisuku/php-steam-openid)',
             CURLOPT_URL => 'https://steamcommunity.com/openid/login',
@@ -131,15 +133,15 @@ class SteamOpenID
             CURLOPT_POSTFIELDS => $arguments,
             CURLOPT_HTTPHEADER => ['Referer: https://steamcommunity.com', 'Origin: https://steamcommunity.com']
         ]);
-
+    
         $response = curl_exec($c);
-
+    
         curl_close($c);
-
+    
         if ($response !== false && strrpos($response, 'is_valid:true') !== false) {
-            return $communityId[1];
+            return $steamId64;
         }
-
+    
         throw new Exception("did not receive a valid response from check_authentication call");
     }
 
