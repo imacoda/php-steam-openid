@@ -78,7 +78,6 @@ class SteamOpenID
      */
     public function validate(): string
     {
-        // Проверка констант
         $constraints = [
             'openid_ns' => 'http://specs.openid.net/auth/2.0',
             'openid_op_endpoint' => 'https://steamcommunity.com/openid/login',
