@@ -127,8 +127,11 @@ class SteamOpenID
             CURLOPT_USERAGENT => 'OpenID Verification (+https://github.com/fisuku/php-steam-openid)',
             CURLOPT_URL => 'https://steamcommunity.com/openid/login',
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => 6,
-            CURLOPT_TIMEOUT => 6,
+            // The overall timeout covers Steam's response latency, which can
+            // legitimately reach several seconds during peak load - the old 6s
+            // cut off otherwise-healthy authentications.
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 20,
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => $arguments,
             CURLOPT_HTTPHEADER => ['Referer: https://steamcommunity.com', 'Origin: https://steamcommunity.com']
