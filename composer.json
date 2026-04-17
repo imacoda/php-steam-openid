@@ -10,7 +10,7 @@
     "steamcommunity"
   ],
   "require": {
-    "php": "^7.2|^8.0",
+    "php": "^8.0",
     "ext-curl": "*"
   },
   "autoload": {
