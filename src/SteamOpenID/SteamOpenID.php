@@ -2,7 +2,6 @@
 
 namespace SteamOpenID;
 
-use Exception;
 use InvalidArgumentException;
 
 /**
@@ -74,7 +73,8 @@ class SteamOpenID
      *
      * @return string 64-bit Steam Community ID
      * @throws InvalidArgumentException if request parameters appear to be tampered with.
-     * @throws Exception the nonce was already used, or there is a problem with the Steam gateway.
+     * @throws TransientException on network/transport failures talking to Steam. Callers may retry with a new handshake.
+     * @throws AuthRejectedException when Steam responds but rejects the nonce/signature. Do not retry; initiate a fresh handshake.
      */
     public function validate(): string
     {
@@ -135,14 +135,40 @@ class SteamOpenID
         ]);
     
         $response = curl_exec($c);
-    
+        $curlError = (string) curl_error($c);
+        $httpCode = (int) curl_getinfo($c, CURLINFO_HTTP_CODE);
+
         curl_close($c);
-    
+
         if ($response !== false && strrpos($response, 'is_valid:true') !== false) {
             return $steamId64;
         }
-    
-        throw new Exception("did not receive a valid response from check_authentication call");
+
+        $isTransient = $response === false
+            || $httpCode === 0
+            || $httpCode >= 500
+            || $response === '';
+
+        if ($isTransient) {
+            throw new TransientException(
+                sprintf(
+                    "Steam check_authentication transport failure: http_code=%d, curl_error=%s",
+                    $httpCode,
+                    $curlError !== '' ? $curlError : 'none'
+                ),
+                $httpCode,
+                $curlError
+            );
+        }
+
+        throw new AuthRejectedException(
+            sprintf(
+                "Steam check_authentication rejected the assertion: http_code=%d, response=%s",
+                $httpCode,
+                trim((string) $response)
+            ),
+            (string) $response
+        );
     }
 
     /**
